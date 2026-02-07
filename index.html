@@ -89,7 +89,7 @@
     scene.add(ballMesh);
 
     const ball = {
-      x: 0, z: 0, vx: 0.35, vz: 0.35,
+      x: 0, z: 0, vx: 18, vz: 18,
       get radius() { return ballRadius; }
     };
 
@@ -114,8 +114,8 @@
     const racket1 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
     const racket2 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
 
-    const moveSpeed = 0.45;
-    const swingPower = 0.15;
+    const moveSpeed = 25;
+    const swingPower = 8;
     const tableHalfW = tableWidth / 2;
     const tableHalfL = tableLength / 2;
     const pad = 1.5; // extra padding so ball doesn't tunnel through paddle in one frame
@@ -123,6 +123,7 @@
     let keys = {};
     let touchX = null;
     let hitCount1 = 0, hitCount2 = 0;
+    let aiAimError = (Math.random() - 0.5) * 10;
 
     function pointerToRacketX(clientX) {
       const rect = canvas.getBoundingClientRect();
@@ -133,8 +134,9 @@
     function restart() {
       ball.x = 0;
       ball.z = 0;
-      ball.vx = 0.35;
-      ball.vz = 0.35;
+      ball.vx = 18;
+      ball.vz = 18;
+      aiAimError = (Math.random() - 0.5) * 10;
       // Keep hitCount1 and hitCount2 - do not reset scores on miss
     }
 
@@ -172,19 +174,19 @@
       p2Label.textContent = 'You: ' + hitCount2 + ' hits';
     }
 
-    function updateAI() {
+    function updateAI(dt) {
       // Red paddle: move toward ball when ball is coming toward it (vz < 0)
       if (ball.vz < 0) {
-        const targetX = ball.x;
+        const targetX = ball.x + aiAimError;
         const diff = targetX - racket1.x;
-        const maxStep = moveSpeed;
+        const maxStep = moveSpeed * dt;
         if (Math.abs(diff) > maxStep) racket1.x += Math.sign(diff) * maxStep;
         else racket1.x = targetX;
       }
     }
 
-    function update() {
-      updateAI();
+    function update(dt) {
+      updateAI(dt);
       if (touchX !== null) {
         racket2.x = pointerToRacketX(touchX);
         racket2.vx = 0;
@@ -192,7 +194,7 @@
         if (keys['a']) racket2.vx = -moveSpeed;
         else if (keys['d']) racket2.vx = moveSpeed;
         else racket2.vx = 0;
-        racket2.x += racket2.vx;
+        racket2.x += racket2.vx * dt;
       }
       clampRacket(racket1);
       clampRacket(racket2);
@@ -200,8 +202,8 @@
       racket1.vx = 0; // AI doesn't use vx for swing
       paddle2Mesh.position.x = racket2.x;
 
-      ball.x += ball.vx;
-      ball.z += ball.vz;
+      ball.x += ball.vx * dt;
+      ball.z += ball.vz * dt;
       ballMesh.position.x = ball.x;
       ballMesh.position.z = ball.z;
 
@@ -221,6 +223,7 @@
       if (ball.vz < 0 && ball.z + ball.radius >= -paddleZ - racket1.h / 2 && ball.z - ball.radius <= -paddleZ + racket1.h / 2) {
         if (hitRacket(racket1, ball.x, ball.z)) {
           ball.z = -paddleZ + racket1.h / 2 + ball.radius + 0.1; // just inside table
+          aiAimError = (Math.random() - 0.5) * 10;
           hitCount1++;
         }
       }
@@ -244,7 +247,7 @@
         return;
       }
 
-      const maxSpeed = 0.6;
+      const maxSpeed = 32;
       const v = Math.sqrt(ball.vx * ball.vx + ball.vz * ball.vz);
       if (v > maxSpeed) {
         ball.vx = (ball.vx / v) * maxSpeed;
@@ -284,12 +287,15 @@
     document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
     updateUI();
-    function loop() {
-      update();
+    let lastTime = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      update(dt);
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
     }
-    loop();
+    requestAnimationFrame(loop);
   </script>
 </body>
 </html>
