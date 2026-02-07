@@ -155,6 +155,9 @@
         ball.vx += r.swing * swingPower;
         r.swing = 0;
       }
+      const speedBoost = 1.06;
+      ball.vx *= speedBoost;
+      ball.vz *= speedBoost;
       return true;
     }
 
@@ -247,7 +250,7 @@
         return;
       }
 
-      const maxSpeed = 32;
+      const maxSpeed = 50;
       const v = Math.sqrt(ball.vx * ball.vx + ball.vz * ball.vz);
       if (v > maxSpeed) {
         ball.vx = (ball.vx / v) * maxSpeed;
