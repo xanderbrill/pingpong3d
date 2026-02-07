@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ping Pong 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0f;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #eee;
+      overflow: hidden;
+    }
+    h1 { margin-bottom: 6px; font-weight: 600; }
+    .controls { margin-bottom: 8px; font-size: 13px; opacity: 0.85; }
+    #game { display: block; width: 900px; height: 560px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Ping Pong 3D</h1>
+  <p class="controls">Red paddle: AI · Player (blue): A D move, W swing</p>
+  <canvas id="game"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+    const canvas = document.getElementById('game');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a12);
+
+    const camera = new THREE.PerspectiveCamera(50, 900 / 560, 0.1, 1000);
+    camera.position.set(0, 28, 28);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(900, 560);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0x404060, 0.6);
+    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(15, 25, 15);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 80;
+    dirLight.shadow.camera.left = -25;
+    dirLight.shadow.camera.right = 25;
+    dirLight.shadow.camera.top = 25;
+    dirLight.shadow.camera.bottom = -25;
+    scene.add(dirLight);
+
+    // Table dimensions (world units: x = width, z = length, y = up)
+    const tableWidth = 24;
+    const tableLength = 36;
+    const tableThickness = 1.2;
+
+    // Table
+    const tableGeo = new THREE.BoxGeometry(tableWidth, tableThickness, tableLength);
+    const tableMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.8, metalness: 0.1 });
+    const tableMesh = new THREE.Mesh(tableGeo, tableMat);
+    tableMesh.receiveShadow = true;
+    tableMesh.position.y = -tableThickness / 2;
+    scene.add(tableMesh);
+
+    // Net (low so ball passes over)
+    const netGeo = new THREE.BoxGeometry(0.2, 0.8, tableLength);
+    const netMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const net = new THREE.Mesh(netGeo, netMat);
+    net.position.y = 0.4;
+    scene.add(net);
+
+    // Ball
+    const ballRadius = 1.2;
+    const ballGeo = new THREE.SphereGeometry(ballRadius, 24, 24);
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
+    const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+    ballMesh.castShadow = true;
+    ballMesh.position.y = ballRadius;
+    scene.add(ballMesh);
+
+    const ball = {
+      x: 0, z: 0, vx: 0.35, vz: 0.35,
+      get radius() { return ballRadius; }
+    };
+
+    // Paddles (flat, move along x)
+    const paddleWidth = 8;
+    const paddleHeight = 0.4;
+    const paddleDepth = 2;
+    const paddleZ = tableLength / 2 - 2;
+
+    const paddleGeo = new THREE.BoxGeometry(paddleWidth, paddleHeight, paddleDepth);
+    const paddle1Mat = new THREE.MeshStandardMaterial({ color: 0xe94560 });
+    const paddle2Mat = new THREE.MeshStandardMaterial({ color: 0x0f3460 });
+    const paddle1Mesh = new THREE.Mesh(paddleGeo, paddle1Mat);
+    const paddle2Mesh = new THREE.Mesh(paddleGeo, paddle2Mat);
+    paddle1Mesh.castShadow = true;
+    paddle2Mesh.castShadow = true;
+    paddle1Mesh.position.set(0, paddleHeight / 2, -paddleZ);
+    paddle2Mesh.position.set(0, paddleHeight / 2, paddleZ);
+    scene.add(paddle1Mesh);
+    scene.add(paddle2Mesh);
+
+    const racket1 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
+    const racket2 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
+
+    const moveSpeed = 0.45;
+    const swingPower = 0.15;
+    const tableHalfW = tableWidth / 2;
+    const tableHalfL = tableLength / 2;
+    const pad = 1.5; // extra padding so ball doesn't tunnel through paddle in one frame
+
+    let keys = {};
+    let hitCount1 = 0, hitCount2 = 0;
+
+    function restart() {
+      ball.x = 0;
+      ball.z = 0;
+      ball.vx = 0.35;
+      ball.vz = 0.35;
+      // Keep hitCount1 and hitCount2 - do not reset scores on miss
+    }
+
+    function clampRacket(r) {
+      r.x = Math.max(-tableHalfW + r.w / 2, Math.min(tableHalfW - r.w / 2, r.x));
+    }
+
+    function hitRacket(r, bx, bz) {
+      const rx = r.x - r.w / 2;
+      const rz = (r === racket1 ? -paddleZ : paddleZ) - r.h / 2;
+      const overlapX = bx + ball.radius + pad >= rx && bx - ball.radius - pad <= rx + r.w;
+      const overlapZ = bz + ball.radius + pad >= rz && bz - ball.radius - pad <= rz + r.h;
+      if (!overlapX || !overlapZ) return false;
+      ball.vz = -ball.vz; // bounce
+      if (r.swing) {
+        ball.vx += r.swing * swingPower;
+        r.swing = 0;
+      }
+      return true;
+    }
+
+    // UI overlay for hit counts
+    const ui = document.createElement('div');
+    ui.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);display:flex;gap:60px;font-size:16px;pointer-events:none;z-index:10;';
+    document.body.appendChild(ui);
+    const p1Label = document.createElement('span');
+    p1Label.style.color = '#e94560';
+    ui.appendChild(p1Label);
+    const p2Label = document.createElement('span');
+    p2Label.style.color = '#0f3460';
+    ui.appendChild(p2Label);
+
+    function updateUI() {
+      p1Label.textContent = 'AI: ' + hitCount1 + ' hits';
+      p2Label.textContent = 'You: ' + hitCount2 + ' hits';
+    }
+
+    function updateAI() {
+      // Red paddle: move toward ball when ball is coming toward it (vz < 0)
+      if (ball.vz < 0) {
+        const targetX = ball.x;
+        const diff = targetX - racket1.x;
+        const maxStep = moveSpeed;
+        if (Math.abs(diff) > maxStep) racket1.x += Math.sign(diff) * maxStep;
+        else racket1.x = targetX;
+      }
+    }
+
+    function update() {
+      updateAI();
+      if (keys['a']) racket2.vx = -moveSpeed;
+      else if (keys['d']) racket2.vx = moveSpeed;
+      else racket2.vx = 0;
+
+      racket2.x += racket2.vx;
+      clampRacket(racket1);
+      clampRacket(racket2);
+      paddle1Mesh.position.x = racket1.x;
+      racket1.vx = 0; // AI doesn't use vx for swing
+      paddle2Mesh.position.x = racket2.x;
+
+      ball.x += ball.vx;
+      ball.z += ball.vz;
+      ballMesh.position.x = ball.x;
+      ballMesh.position.z = ball.z;
+
+      // Table sides (x) - bounce off left/right
+      if (ball.x - ball.radius <= -tableHalfW) {
+        ball.x = -tableHalfW + ball.radius;
+        ball.vx = -ball.vx;
+      }
+      if (ball.x + ball.radius >= tableHalfW) {
+        ball.x = tableHalfW - ball.radius;
+        ball.vx = -ball.vx;
+      }
+
+      // Paddle hits BEFORE miss so we don't restart when ball is in paddle zone
+      // After bounce, place ball on TABLE side of paddle so we don't trigger miss
+      // Paddle 1 at -z (ball moving toward it, negative vz); after bounce ball goes +z
+      if (ball.vz < 0 && ball.z + ball.radius >= -paddleZ - racket1.h / 2 && ball.z - ball.radius <= -paddleZ + racket1.h / 2) {
+        if (hitRacket(racket1, ball.x, ball.z)) {
+          ball.z = -paddleZ + racket1.h / 2 + ball.radius + 0.1; // just inside table
+          hitCount1++;
+        }
+      }
+      // Paddle 2 at +z (ball moving toward it, positive vz); after bounce ball goes -z
+      if (ball.vz > 0 && ball.z - ball.radius <= paddleZ + racket2.h / 2 && ball.z + ball.radius >= paddleZ - racket2.h / 2) {
+        if (hitRacket(racket2, ball.x, ball.z)) {
+          ball.z = paddleZ - racket2.h / 2 - ball.radius - 0.1; // just inside table
+          hitCount2++;
+        }
+      }
+
+      // Miss: who missed loses a point, then restart ball
+      if (ball.z - ball.radius < -tableHalfL) {
+        hitCount1 = Math.max(0, hitCount1 - 1); // AI missed
+        restart();
+        return;
+      }
+      if (ball.z + ball.radius > tableHalfL) {
+        hitCount2 = Math.max(0, hitCount2 - 1); // Player missed
+        restart();
+        return;
+      }
+
+      const maxSpeed = 0.6;
+      const v = Math.sqrt(ball.vx * ball.vx + ball.vz * ball.vz);
+      if (v > maxSpeed) {
+        ball.vx = (ball.vx / v) * maxSpeed;
+        ball.vz = (ball.vz / v) * maxSpeed;
+      }
+
+      updateUI();
+    }
+
+    document.addEventListener('keydown', e => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === 'w') {
+        racket2.swing = racket2.vx !== 0 ? (racket2.vx > 0 ? 1 : -1) : 0;
+      }
+    });
+    document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+    updateUI();
+    function loop() {
+      update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
