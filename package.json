@@ -4,7 +4,7 @@
   "description": "3D Ping Pong game",
   "main": "index.html",
   "scripts": {
-    "start": "npx serve -s"
+    "start": "node server.js"
   },
   "dependencies": {
     "serve": "^14.2.4"
