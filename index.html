@@ -89,7 +89,7 @@
     scene.add(ballMesh);
 
     const ball = {
-      x: 0, z: 0, vx: 18, vz: 18,
+      x: 0, z: 0, vx: 20, vz: 20,
       get radius() { return ballRadius; }
     };
 
@@ -114,7 +114,7 @@
     const racket1 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
     const racket2 = { x: 0, vx: 0, swing: 0, w: paddleWidth, h: paddleDepth };
 
-    const moveSpeed = 25;
+    const moveSpeed = 40;
     const swingPower = 8;
     const tableHalfW = tableWidth / 2;
     const tableHalfL = tableLength / 2;
@@ -134,8 +134,8 @@
     function restart() {
       ball.x = 0;
       ball.z = 0;
-      ball.vx = 18;
-      ball.vz = 18;
+      ball.vx = 20;
+      ball.vz = 20;
       aiAimError = (Math.random() - 0.5) * 10;
       // Keep hitCount1 and hitCount2 - do not reset scores on miss
     }
