@@ -123,7 +123,7 @@
     let keys = {};
     let touchX = null;
     let hitCount1 = 0, hitCount2 = 0;
-    let aiAimError = (Math.random() - 0.5) * 10;
+    let aiAimError = (Math.random() - 0.5) * 18;
 
     function pointerToRacketX(clientX) {
       const rect = canvas.getBoundingClientRect();
@@ -136,7 +136,7 @@
       ball.z = 0;
       ball.vx = 20;
       ball.vz = 20;
-      aiAimError = (Math.random() - 0.5) * 10;
+      aiAimError = (Math.random() - 0.5) * 18;
       // Keep hitCount1 and hitCount2 - do not reset scores on miss
     }
 
@@ -226,7 +226,7 @@
       if (ball.vz < 0 && ball.z + ball.radius >= -paddleZ - racket1.h / 2 && ball.z - ball.radius <= -paddleZ + racket1.h / 2) {
         if (hitRacket(racket1, ball.x, ball.z)) {
           ball.z = -paddleZ + racket1.h / 2 + ball.radius + 0.1; // just inside table
-          aiAimError = (Math.random() - 0.5) * 10;
+          aiAimError = (Math.random() - 0.5) * 18;
           hitCount1++;
         }
       }
