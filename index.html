@@ -177,9 +177,11 @@
     }
 
     function updateAI(dt) {
-      // Red paddle: move toward ball when ball is coming toward it (vz < 0)
+      // Red paddle: predict where ball will be when it reaches the paddle (vz < 0)
       if (ball.vz < 0) {
-        const targetX = ball.x + aiAimError;
+        const t = -(ball.z + paddleZ) / ball.vz;
+        const predictedX = ball.x + ball.vx * t;
+        const targetX = predictedX + aiAimError;
         const diff = targetX - racket1.x;
         const maxStep = moveSpeed * dt;
         if (Math.abs(diff) > maxStep) racket1.x += Math.sign(diff) * maxStep;
