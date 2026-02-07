@@ -19,12 +19,12 @@
     }
     h1 { margin-bottom: 6px; font-weight: 600; }
     .controls { margin-bottom: 8px; font-size: 13px; opacity: 0.85; }
-    #game { display: block; width: 900px; height: 560px; border-radius: 8px; }
+    #game { display: block; width: 900px; height: 560px; border-radius: 8px; touch-action: none; }
   </style>
 </head>
 <body>
   <h1>Ping Pong 3D</h1>
-  <p class="controls">Red paddle: AI · Player (blue): A D move, W swing</p>
+  <p class="controls">Red paddle: AI · Player (blue): drag or A/D move, W swing</p>
   <canvas id="game"></canvas>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
@@ -121,7 +121,14 @@
     const pad = 1.5; // extra padding so ball doesn't tunnel through paddle in one frame
 
     let keys = {};
+    let touchX = null;
     let hitCount1 = 0, hitCount2 = 0;
+
+    function pointerToRacketX(clientX) {
+      const rect = canvas.getBoundingClientRect();
+      const t = (clientX - rect.left) / rect.width;
+      return (t - 0.5) * tableWidth;
+    }
 
     function restart() {
       ball.x = 0;
@@ -178,11 +185,15 @@
 
     function update() {
       updateAI();
-      if (keys['a']) racket2.vx = -moveSpeed;
-      else if (keys['d']) racket2.vx = moveSpeed;
-      else racket2.vx = 0;
-
-      racket2.x += racket2.vx;
+      if (touchX !== null) {
+        racket2.x = pointerToRacketX(touchX);
+        racket2.vx = 0;
+      } else {
+        if (keys['a']) racket2.vx = -moveSpeed;
+        else if (keys['d']) racket2.vx = moveSpeed;
+        else racket2.vx = 0;
+        racket2.x += racket2.vx;
+      }
       clampRacket(racket1);
       clampRacket(racket2);
       paddle1Mesh.position.x = racket1.x;
@@ -242,6 +253,27 @@
 
       updateUI();
     }
+
+    canvas.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      touchX = e.clientX;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (e.pointerId && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        touchX = e.clientX;
+      } else if (e.buttons !== 0) {
+        touchX = e.clientX;
+      }
+    });
+    canvas.addEventListener('pointerup', e => {
+      canvas.releasePointerCapture(e.pointerId);
+      touchX = null;
+    });
+    canvas.addEventListener('pointercancel', () => { touchX = null; });
+    canvas.addEventListener('pointerleave', e => {
+      if (!e.buttons) touchX = null;
+    });
 
     document.addEventListener('keydown', e => {
       keys[e.key.toLowerCase()] = true;
