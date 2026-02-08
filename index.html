@@ -79,6 +79,23 @@
     net.position.y = 0.4;
     scene.add(net);
 
+    // Wall with opening in the middle (ball must go through the gap)
+    const wallHeight = 6;
+    const wallThickness = 0.6;
+    const wallGap = 8;
+    const wallHalfW = (tableWidth - wallGap) / 2;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.7, metalness: 0.1 });
+    const leftWallGeo = new THREE.BoxGeometry(wallHalfW, wallHeight, wallThickness);
+    const rightWallGeo = new THREE.BoxGeometry(wallHalfW, wallHeight, wallThickness);
+    const leftWall = new THREE.Mesh(leftWallGeo, wallMat);
+    const rightWall = new THREE.Mesh(rightWallGeo, wallMat);
+    leftWall.position.set(-(wallGap / 2 + wallHalfW / 2), wallHeight / 2, 0);
+    rightWall.position.set(wallGap / 2 + wallHalfW / 2, wallHeight / 2, 0);
+    leftWall.receiveShadow = true;
+    rightWall.receiveShadow = true;
+    scene.add(leftWall);
+    scene.add(rightWall);
+
     // Ball
     const ballRadius = 0.8;
     const ballGeo = new THREE.SphereGeometry(ballRadius, 24, 24);
@@ -211,6 +228,21 @@
       ballMesh.position.x = ball.x;
       ballMesh.position.z = ball.z;
 
+      // Wall collision (bounce off wall if not through opening)
+      const wallGapHalf = wallGap / 2;
+      const wallZHalf = wallThickness / 2;
+      if (Math.abs(ball.z) < wallZHalf + ball.radius) {
+        const leftWallRight = -wallGapHalf;
+        const rightWallLeft = wallGapHalf;
+        if (ball.x + ball.radius > -tableHalfW && ball.x - ball.radius < leftWallRight) {
+          ball.x = leftWallRight - ball.radius;
+          ball.vx = -ball.vx;
+        }
+        if (ball.x - ball.radius < tableHalfW && ball.x + ball.radius > rightWallLeft) {
+          ball.x = rightWallLeft + ball.radius;
+          ball.vx = -ball.vx;
+        }
+      }
       // Table sides (x) - bounce off left/right
       if (ball.x - ball.radius <= -tableHalfW) {
         ball.x = -tableHalfW + ball.radius;
